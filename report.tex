@@ -1,0 +1,144 @@
+%%%
+%%% HEADER
+%%%
+
+\documentclass[a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[czech]{babel}
+\usepackage{listings} 
+\usepackage[pdfborder={1 0 0}]{hyperref} 
+\usepackage{graphicx}
+\usepackage{wrapfig}
+\usepackage{subfig}
+\usepackage{color}
+\usepackage{xcolor}
+\usepackage{amsmath}
+\usepackage{caption}
+\usepackage[a4paper,vmargin={35mm, 35mm}, hmargin={35mm, 35mm}]{geometry}
+\usepackage[affil-it]{authblk} 
+\usepackage{etoolbox}
+\usepackage{lmodern}
+\usepackage{titlesec}
+
+%% colors
+\definecolor{titleblue}{rgb}{0.02, 0.37, 0.55}
+\definecolor{sectionblue}{rgb}{0.25, 0.44, 0.60}
+\definecolor{subsectionblue}{rgb}{0.37, 0.59, 0.77}
+\definecolor{gray}{rgb}{0.9,0.9,0.9}
+
+%% mod title section
+\makeatletter
+% line hackity hack
+\let\old@rule\@rule
+\def\@rule[#1]#2#3{\textcolor{titleblue}{\old@rule[#1]{#2}{#3}}}
+\renewcommand{\@maketitle}{
+  % font family shortcuts ref: http://tex.stackexchange.com/a/25251
+  \begin{flushleft}
+  {\color{titleblue}
+   \fontfamily{lmss}
+   \fontsize{26}{0}
+   \selectfont
+   \@title
+   }{}{}
+  \end{flushleft}
+
+  \noindent\makebox[\linewidth]{\rule{\textwidth}{0.1pt}}
+  \par
+  {\fontsize{1}{0}\@author} %authorhack
+  \fontfamily{lmss}\fontsize{12}{0}\color{subsectionblue}\\
+  
+  \noindent\textit{Datum: \@date}
+}
+\makeatother
+
+%% mod styles
+\titleformat*{\section}{\LARGE\bfseries\sffamily\color{sectionblue}}
+\titleformat*{\subsection}{\Large\bfseries\sffamily\color{subsectionblue}}
+\titleformat*{\subsubsection}{\large\bfseries\sffamily\color{subsectionblue}}
+
+%% mod listings
+\DeclareCaptionFont{white}{\color{white}}
+\DeclareCaptionFont{black}{\color{black}}
+\DeclareCaptionFormat{listing}{\colorbox{gray}{\parbox{\textwidth}{#1#2#3}}}
+\captionsetup[lstlisting]{format=listing,labelfont=black,textfont=black}
+
+
+%%%
+%%% DOCUMENT
+%%%
+
+\begin{document}
+
+\title{IIB - Report z Big File Upload flow}
+\author{-} % authorhack
+\date{\today}
+\maketitle
+
+\section{Úvod}
+
+Report obsahuje poznatky z testovania zjednodušeného flow pre upload veľkých súborov (rádovo desiatky MB).
+Odoslanie súboru prebieha pomocou $curl$ POST requestu.
+
+\section{Testy}
+
+\subsection{Testovacie súbory}
+
+Súbory použité k testovaniu:
+\begin{itemize}
+	\item BigFileUpload.msgflow - súčasť súboru project interchange
+	\item TestFile1.pdf - 10MB súbor
+	\item TestFile2.pdf - 20MB súbor
+\end{itemize}
+
+\subsection{Curl requesty}
+
+Testovanie prebehlo na systéme Win7. Data prijatého súboru boli uložené do c:/temp/uploaded-file a header requestu do c:/temp/HTTP-input-header.
+
+\lstset{title=Vstup, language=bash}
+\begin{lstlisting}
+$ curl --request POST "http://localhost:7800/upload" --data "test"
+\end{lstlisting}
+
+Tento request funguje bez problémov a správne uloží data a header.
+
+\lstset{title=Vstup, language=bash}
+\begin{lstlisting}
+$ curl --request POST "http://localhost:7800/upload" 
+	   --data-binary @TestFile1.pdf
+\end{lstlisting}
+
+Tento request nefunguje. Po jeho vykonaní sa integračný server ako keby zasekne a nejde s ním chvíľu pracovať.
+Často to je potrebné riešiť reštartovaním IBM Integration Toolkit a následne čakať kým sa integračný server spametá.
+
+\lstset{title=Vstup, language=bash}
+\begin{lstlisting}
+$ curl --request POST "http://localhost:7800/upload" 
+	--data-binary @TestFile1.pdf 
+	--header "Content-type:multipart/form-data"
+$ curl --request POST "http://localhost:7800/upload" 
+	--data-binary @TestFile2.pdf 
+	--header "Content-type:multipart/form-data"
+\end{lstlisting}
+
+Tento request funguje bez problémov a správne data a header uloží iba ak nieje zapnutý debug mode. Tento problém je možno
+spôsobený nastavením JVM. Je potrebné zdvyhnúť alocated memory pre veľké súbory.
+
+\subsection{User-defined header}
+
+Použitie user-defined headeru je v IIB jednoduché. Pri každom requeste sa celý header uloží do prijatej message.
+\lstset{title=ESQL príklad, language=sql}
+\begin{lstlisting}
+SET Environment = InputRoot.HTTPInputHeader;
+\end{lstlisting}
+\section{Záver}
+
+Upload dat pomocou curl POST requestu funguje v poriadku iba pri menších súboroch a pri non-binary datach. Akonáhle sú posielané 
+data ako data-binary je potrebné správne nastaviť v headery Content-type inak to spôsobí chvíľkové vytuhnutie integračného serveru.
+
+Pri veľkých súboroch a potrebe použitia debug módu je potrebné zmeniť alocated memory v JVM.
+
+
+
+\end{document}
